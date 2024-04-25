@@ -1,0 +1,78 @@
+Description: EKS Gideon
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  EKSCLusterName:
+    Type: String
+    Description: Eks cluster Name
+    Default: gideons_dev
+  EKSVersion:
+    Type: String
+    Description: Eks version number
+    Default: 1.29
+  Namespace:
+    Type: String
+    Description: Gideons Services
+    Default: gideonsservices
+  Subnet1:
+    Type: "AWS::SSM::Parameter::Value<String>"
+    Default: /NET/GIO_OS/vpc-main/PrivSubnet1Tier2
+  Subnet2:
+    Type: "AWS::SSM::Parameter::Value<String>"
+    Default: /NET/GIO_OS/vpc-main/PrivSubnet2Tier2
+  VpcId:
+    Type: "AWS::SSM::Parameter::Value<String>"
+    Default: /NET/GIO_OS/vpc-main/VPC
+
+Resources:
+  EksSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DeletionPolicy: Retain
+    Properties:
+      GroupDescription: EKS Security Group
+      GroupName: EksSecurityGroup
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.0.0.0/8
+          Description: "Flow for dev tests"
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 172.0.0.0/8
+          Description: "Flow for dev tests"
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    DeletionPolicy: Delete
+    Properties:
+      Name: !Ref EKSCLusterName
+      Version: !Ref EKSVersion
+      RoleArn: arn:aws:iam::077598156737:role/eks_cluster_role
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - !Ref EksSecurityGroup
+        SubnetIds:
+          - !Ref Subnet1
+          - !Ref Subnet2
+
+  FargateProfile:
+    Type: AWS::EKS::FargateProfile
+    DeletionPolicy: Delete
+    Properties:
+      ClusterName: !Ref EKSCLusterName
+      FargateProfileName: !Join ["", [!Ref EKSCLusterName, "Profile"]]
+      PodExecutionRoleArn: arn:aws:iam::077598156737:role/eks_fargate_pod_role
+      Selectors:
+        - Namespace: !Ref Namespace
+        - Namespace: kube-system
+        - Namespace: default
+      Subnets:
+        - !Ref Subnet1
+        - !Ref Subnet2
